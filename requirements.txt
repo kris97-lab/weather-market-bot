@@ -1,0 +1,4 @@
+requests
+python-dotenv
+# live trading only:
+# py-clob-client-v2

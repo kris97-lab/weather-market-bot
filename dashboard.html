@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WeatherBet Analytics</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .fade-in { animation: fadeIn 0.3s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    </style>
+</head>
+<body class="bg-gray-900 text-white min-h-screen">
+    <div class="max-w-7xl mx-auto p-6">
+        <div class="flex justify-between items-center mb-8">
+            <h1 class="text-3xl font-bold text-blue-400 flex items-center gap-2">
+                <span class="text-4xl">🌡️</span> WeatherBet Analytics
+            </h1>
+            <div class="text-sm text-gray-400 bg-gray-800 px-4 py-2 rounded-full border border-gray-700 flex items-center gap-2">
+                <div class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+                Live Updates
+            </div>
+        </div>
+        
+        <!-- Stats Row -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
+            <div class="bg-gray-800 p-6 rounded-xl border border-gray-700 shadow-lg">
+                <div class="text-gray-400 text-sm font-semibold tracking-wider uppercase mb-1">Balance</div>
+                <div class="text-3xl font-bold text-green-400" id="stat-balance">$-</div>
+            </div>
+            <div class="bg-gray-800 p-6 rounded-xl border border-gray-700 shadow-lg">
+                <div class="text-gray-400 text-sm font-semibold tracking-wider uppercase mb-1">Open Positions</div>
+                <div class="text-3xl font-bold text-yellow-400" id="stat-open">-</div>
+            </div>
+            <div class="bg-gray-800 p-6 rounded-xl border border-gray-700 shadow-lg">
+                <div class="text-gray-400 text-sm font-semibold tracking-wider uppercase mb-1">Closed PnL</div>
+                <div class="text-3xl font-bold" id="stat-pnl">$-</div>
+            </div>
+            <div class="bg-gray-800 p-6 rounded-xl border border-gray-700 shadow-lg">
+                <div class="text-gray-400 text-sm font-semibold tracking-wider uppercase mb-1">Total Trades</div>
+                <div class="text-3xl font-bold text-blue-400" id="stat-trades">-</div>
+            </div>
+        </div>
+
+        <!-- Open Positions -->
+        <h2 class="text-xl font-bold mb-4 text-yellow-400 flex items-center gap-2">
+            <span>🟢</span> Active Positions
+        </h2>
+        <div class="bg-gray-800 rounded-xl overflow-hidden mb-10 border border-gray-700 shadow-lg">
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm whitespace-nowrap">
+                    <thead class="bg-gray-700 text-gray-300">
+                        <tr>
+                            <th class="p-4 font-semibold">City / Date</th>
+                            <th class="p-4 font-semibold">Bucket</th>
+                            <th class="p-4 font-semibold">Side</th>
+                            <th class="p-4 font-semibold">Entry Price</th>
+                            <th class="p-4 font-semibold">Shares</th>
+                            <th class="p-4 font-semibold">Current Price</th>
+                            <th class="p-4 font-semibold">PnL (USDC)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="table-open" class="divide-y divide-gray-700 fade-in">
+                        <!-- rows -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Closed Positions -->
+        <h2 class="text-xl font-bold mb-4 text-gray-400 flex items-center gap-2">
+            <span>⚪</span> Closed Positions
+        </h2>
+        <div class="bg-gray-800 rounded-xl overflow-hidden border border-gray-700 shadow-lg">
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm whitespace-nowrap">
+                    <thead class="bg-gray-700 text-gray-300">
+                        <tr>
+                            <th class="p-4 font-semibold">City / Date</th>
+                            <th class="p-4 font-semibold">Bucket</th>
+                            <th class="p-4 font-semibold">Side</th>
+                            <th class="p-4 font-semibold">Entry Price</th>
+                            <th class="p-4 font-semibold">Exit Price</th>
+                            <th class="p-4 font-semibold">PnL</th>
+                            <th class="p-4 font-semibold">Reason</th>
+                        </tr>
+                    </thead>
+                    <tbody id="table-closed" class="divide-y divide-gray-700 fade-in">
+                        <!-- rows -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function fetchData() {
+            try {
+                const res = await fetch('/api/data');
+                const data = await res.json();
+                
+                document.getElementById('stat-balance').innerText = '$' + (data.state.balance || 0).toFixed(2);
+                document.getElementById('stat-open').innerText = data.open_positions.length;
+                document.getElementById('stat-trades').innerText = data.state.total_trades || 0;
+                
+                let totalPnl = 0;
+                let closedHtml = '';
+                data.closed_positions.forEach(p => {
+                    let pnl = p.pnl || 0;
+                    totalPnl += pnl;
+                    let pnlColor = pnl > 0 ? 'text-green-400' : (pnl < 0 ? 'text-red-400' : 'text-gray-400');
+                    closedHtml += `
+                        <tr class="hover:bg-gray-750 transition-colors">
+                            <td class="p-4 font-medium">${p.city.toUpperCase()} (${p.event_date})</td>
+                            <td class="p-4 text-gray-300">${p.bucket_low} - ${p.bucket_high}</td>
+                            <td class="p-4"><span class="px-2.5 py-1 rounded text-xs font-bold ${p.side === 'YES' ? 'bg-green-900/50 text-green-400 border border-green-800' : 'bg-red-900/50 text-red-400 border border-red-800'}">${p.side}</span></td>
+                            <td class="p-4">$${(p.entry_price || 0).toFixed(3)}</td>
+                            <td class="p-4">$${(p.exit_price || 0).toFixed(3)}</td>
+                            <td class="p-4 font-bold ${pnlColor}">${pnl > 0 ? '+' : ''}$${pnl.toFixed(2)}</td>
+                            <td class="p-4 text-gray-400"><span class="bg-gray-700 px-2 py-1 rounded text-xs">${p.close_reason || 'resolved'}</span></td>
+                        </tr>
+                    `;
+                });
+                
+                let openHtml = '';
+                data.open_positions.forEach(p => {
+                    let realPnl = p.real_pnl || 0;
+                    totalPnl += realPnl;
+                    let pnlColor = realPnl > 0 ? 'text-green-400' : (realPnl < 0 ? 'text-red-400' : 'text-gray-400');
+                    openHtml += `
+                        <tr class="hover:bg-gray-750 transition-colors">
+                            <td class="p-4 font-medium">${p.city.toUpperCase()} (${p.event_date})</td>
+                            <td class="p-4 text-gray-300">${p.bucket_low} - ${p.bucket_high}</td>
+                            <td class="p-4"><span class="px-2.5 py-1 rounded text-xs font-bold ${p.side === 'YES' ? 'bg-green-900/50 text-green-400 border border-green-800' : 'bg-red-900/50 text-red-400 border border-red-800'}">${p.side}</span></td>
+                            <td class="p-4 font-semibold">$${(p.entry_price || 0).toFixed(3)}</td>
+                            <td class="p-4 text-gray-300">${(p.real_shares || p.shares || 0).toFixed(1)}</td>
+                            <td class="p-4">$${(p.real_current_price || 0).toFixed(3)}</td>
+                            <td class="p-4 font-bold ${pnlColor}">${realPnl > 0 ? '+' : ''}$${realPnl.toFixed(2)}</td>
+                        </tr>
+                    `;
+                });
+                document.getElementById('table-open').innerHTML = openHtml || '<tr><td colspan="7" class="p-4 text-center text-gray-500">No open positions right now</td></tr>';
+                
+                let pnlEl = document.getElementById('stat-pnl');
+                pnlEl.innerText = (totalPnl >= 0 ? '+' : '') + '$' + totalPnl.toFixed(2);
+                pnlEl.className = 'text-3xl font-bold ' + (totalPnl > 0 ? 'text-green-400' : (totalPnl < 0 ? 'text-red-400' : 'text-gray-400'));
+                
+                document.getElementById('table-closed').innerHTML = closedHtml || '<tr><td colspan="7" class="p-4 text-center text-gray-500">No closed positions yet</td></tr>';
+            } catch (e) {
+                console.error("Error fetching data:", e);
+            }
+        }
+
+        fetchData();
+        setInterval(fetchData, 10000); // refresh every 10 seconds
+    </script>
+</body>
+</html>
